@@ -1,0 +1,72 @@
+{
+  "name": "mooch-vscode-extension",
+  "displayName": "Mooch Code Analyzer",
+  "description": "VSCode extension that integrates with Mooch to analyze code files in the background",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Mooch Code Analyzer",
+      "properties": {
+        "moochAnalyzer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic analysis of current file"
+        },
+        "moochAnalyzer.events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "onOpen",
+              "onSave",
+              "onFocus"
+            ]
+          },
+          "default": [
+            "onOpen",
+            "onSave"
+          ],
+          "description": "Events that trigger code analysis"
+        },
+        "moochAnalyzer.bridgeUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:62544",
+          "description": "URL of the Mooch bridge API"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^25.5.0",
+    "@types/vscode": "^1.110.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.1",
+    "@typescript-eslint/parser": "^6.19.1",
+    "@vscode/test-electron": "^2.3.9",
+    "eslint": "^8.56.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
