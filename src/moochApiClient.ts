@@ -1,53 +1,64 @@
 import * as vscode from 'vscode';
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 
-export interface AnalysisResult {
-	analysis: string;
+export interface HintResult {
+	answer: string;
+	explanation: string;
 }
 
 export class MoochApiClient {
-	private baseUrl: string;
-
-	constructor() {
-		this.baseUrl = vscode.workspace.getConfiguration('moochAnalyzer').get<string>('bridgeUrl', 'http://127.0.0.1:62544');
+	private get baseUrl(): string {
+		return vscode.workspace.getConfiguration('moochAnalyzer').get<string>('bridgeUrl', 'http://127.0.0.1:62544');
 	}
 
-	async analyzeCode(code: string, fileName?: string): Promise<AnalysisResult | null> {
-		try {
-			// Get the updated base URL in case it changed in settings
-			this.baseUrl = vscode.workspace.getConfiguration('moochAnalyzer').get<string>('bridgeUrl', 'http://127.0.0.1:62544');
-			
-			const response: AxiosResponse<AnalysisResult> = await axios.post(
-				`${this.baseUrl}/api/analyze`,
-				{
-					code: code,
-					context: fileName ? `File: ${fileName}` : undefined
-				},
-				{
-					headers: {
-						'Content-Type': 'application/json',
-						'X-Mooch-Client': 'vscode-extension'
-					},
-					timeout: 30000 // 30 second timeout
-				}
-			);
+	private get headers() {
+		return {
+			'Content-Type': 'application/json',
+			'X-Mooch-Client': 'vscode-extension',
+		};
+	}
 
+	/** Push the current file to Mooch so it appears in the dashboard. No AI call is made. */
+	async syncCode(code: string, pageTitle: string, language: string): Promise<void> {
+		try {
+			await axios.post(
+				`${this.baseUrl}/api/sync`,
+				{ code, pageTitle, language },
+				{ headers: this.headers, timeout: 5000 }
+			);
+		} catch (error) {
+			if (axios.isAxiosError(error) && error.code === 'ECONNREFUSED') {
+				// Mooch isn't running — silent, expected when app is closed
+				return;
+			}
+			console.error('Mooch sync error:', error instanceof Error ? error.message : error);
+		}
+	}
+
+	/** Keep-alive ping so Mooch doesn't think the extension disconnected. */
+	async heartbeat(): Promise<void> {
+		try {
+			await axios.get(`${this.baseUrl}/health`, { headers: this.headers, timeout: 3000 });
+		} catch {
+			// silent — Mooch may not be running
+		}
+	}
+
+	/** Ask Mooch to generate a hint for the current file. Returns answer + explanation. */
+	async getHint(code: string, pageTitle: string, language: string, userContext?: string): Promise<HintResult | null> {
+		try {
+			const response = await axios.post<HintResult>(
+				`${this.baseUrl}/api/hint`,
+				{ code, pageTitle, language, userContext: userContext || undefined },
+				{ headers: this.headers, timeout: 60000 }
+			);
 			return response.data;
 		} catch (error) {
-			if (axios.isAxiosError(error)) {
-				// Log the error but don't show notifications to keep analysis silent
-				console.error(`Mooch API error: ${error.response?.status} - ${error.response?.data || error.message}`);
-				
-				// Handle specific error cases
-				if (error.code === 'ECONNREFUSED') {
-					console.error('Mooch bridge is not accessible. Is the Mooch application running?');
-				} else if (error.code === 'ETIMEDOUT') {
-					console.error('Mooch API request timed out');
-				}
-			} else {
-				console.error('Unexpected error during analysis:', error);
+			if (axios.isAxiosError(error) && error.response?.status === 503) {
+				vscode.window.showWarningMessage('Mooch: no AI provider configured. Add an API key in Mooch settings.');
 			}
-			
+			// All other errors (ECONNREFUSED, timeouts, etc.) are silent — user invoked this deliberately
+			// so a missing response is self-explanatory
 			return null;
 		}
 	}
